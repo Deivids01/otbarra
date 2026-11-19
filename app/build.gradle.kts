@@ -12,8 +12,8 @@ android {
         applicationId = "com.davidlg.iptvplayer.android"
         minSdk = 24
         targetSdk = 35
-        versionCode = 15
-        versionName = "5.9.0-ott-redesign"
+        versionCode = 16
+        versionName = "5.9.2-ott-rebuild"
     }
 
     buildTypes {

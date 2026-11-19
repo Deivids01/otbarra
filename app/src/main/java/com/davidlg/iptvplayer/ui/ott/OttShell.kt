@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -46,7 +47,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/** Navegación exclusiva de OTT Nuevo. ClassicShell no se modifica ni comparte esta barra. */
+/** Contenedor y navegación exclusivos de OTT Nuevo. ClassicShell permanece independiente. */
 @Composable
 fun OttShell(vm: MainViewModel) {
     Column(
@@ -83,10 +84,13 @@ private val OTT_NAV = listOf(
 private fun OttTopBar(vm: MainViewModel) {
     val profile by vm.activeProfile.collectAsState()
     val profiles by vm.profiles.collectAsState()
-    val compact = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 720
+    val width = LocalConfiguration.current.screenWidthDp
+    val phone = width < 600
+    val desktop = width >= 1180
     var now by remember { mutableStateOf(Date()) }
     var profileMenu by remember { mutableStateOf(false) }
     var navMenu by remember { mutableStateOf(false) }
+
     LaunchedEffect(Unit) {
         while (true) {
             now = Date()
@@ -94,82 +98,120 @@ private fun OttTopBar(vm: MainViewModel) {
         }
     }
 
-    val dateText = remember(now) { SimpleDateFormat("EEE, d MMM", Locale("es", "MX")).format(now).uppercase(Locale("es", "MX")) }
-    val timeText = remember(now) { SimpleDateFormat("h:mm:ss a", Locale.US).format(now) }
+    val dateText = remember(now) {
+        SimpleDateFormat("EEE d MMM", Locale("es", "MX")).format(now).uppercase(Locale("es", "MX"))
+    }
+    val timeText = remember(now) { SimpleDateFormat("h:mm:ss a", Locale.US).format(now).uppercase(Locale.US) }
 
     Column(
         Modifier.fillMaxWidth()
             .background(Color(0xF20A111E))
             .border(1.dp, Color(0x20FFFFFF), RoundedCornerShape(0.dp))
-            .padding(horizontal = if (compact) 12.dp else 28.dp, vertical = if (compact) 8.dp else 12.dp)
+            .padding(horizontal = if (phone) 9.dp else if (desktop) 28.dp else 18.dp, vertical = if (phone) 7.dp else 10.dp)
     ) {
         Row(
-            Modifier.fillMaxWidth().height(if (compact) 46.dp else 54.dp),
+            Modifier.fillMaxWidth().height(if (phone) 42.dp else 54.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(
                 Modifier.clip(RoundedCornerShape(8.dp))
-                    .dlClickable(RoundedCornerShape(8.dp), Color.White, 1.dp, 1.01f) { vm.ottTab = OttTab.Start }
-                    .padding(end = 8.dp),
+                    .dlClickable(RoundedCornerShape(8.dp), Color.White, 2.dp, 1.02f) { vm.ottTab = OttTab.Start }
+                    .padding(end = 7.dp),
             ) {
                 Text(
                     "DavidLG IPTV Player",
                     color = Color.White,
-                    fontSize = if (compact) 14.sp else 21.sp,
+                    fontSize = if (phone) 12.sp else if (desktop) 21.sp else 18.sp,
                     fontWeight = FontWeight.ExtraBold,
                     fontFamily = Poppins,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                if (!compact) Text("ENTRETENIMIENTO EN UN SOLO LUGAR", color = OttGoldDim, fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.25.sp)
+                if (!phone) Text(
+                    "ENTRETENIMIENTO EN UN SOLO LUGAR",
+                    color = OttGoldDim,
+                    fontSize = 8.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.15.sp,
+                    maxLines = 1,
+                )
             }
-            if (compact) {
+
+            if (phone) {
                 Box {
                     Box(
-                        Modifier.padding(start = 4.dp).size(34.dp).clip(RoundedCornerShape(10.dp))
-                            .background(Color(0x18FFFFFF)).border(1.dp, Color(0x2AFFFFFF), RoundedCornerShape(10.dp))
-                            .dlClickable(RoundedCornerShape(10.dp), OttGold, 2.dp, 1.04f) { navMenu = true },
+                        Modifier.padding(start = 3.dp).size(32.dp).clip(RoundedCornerShape(9.dp))
+                            .background(Color(0x18FFFFFF))
+                            .border(1.dp, Color(0x2AFFFFFF), RoundedCornerShape(9.dp))
+                            .dlClickable(RoundedCornerShape(9.dp), OttGold, 2.dp, 1.04f) { navMenu = true },
                         contentAlignment = Alignment.Center,
-                    ) { Text("☰", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold) }
+                    ) { Text("☰", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold) }
                     DropdownMenu(expanded = navMenu, onDismissRequest = { navMenu = false }) {
-                        (OTT_NAV + OttNavItem(OttTab.Fav, "Mi lista", Ico.fav)).forEach { item ->
-                            DropdownMenuItem(
-                                text = { Text(item.label) },
-                                onClick = { navMenu = false; vm.ottTab = item.tab },
-                            )
+                        DropdownMenuItem(text = { Text("Inicio") }, onClick = { navMenu = false; vm.ottTab = OttTab.Start })
+                        OTT_NAV.forEach { item ->
+                            DropdownMenuItem(text = { Text(item.label) }, onClick = { navMenu = false; vm.ottTab = item.tab })
                         }
+                        DropdownMenuItem(text = { Text("Mi lista") }, onClick = { navMenu = false; vm.ottTab = OttTab.Fav })
                     }
                 }
+            } else if (desktop) {
+                Spacer(Modifier.width(20.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    OTT_NAV.forEach { item -> OttNavButton(item, vm, compact = false) }
+                }
             }
+
             Spacer(Modifier.weight(1f))
-            Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(end = if (compact) 5.dp else 18.dp)) {
-                Text(dateText, color = OttGoldDim, fontSize = if (compact) 7.sp else 9.sp, fontWeight = FontWeight.Bold, letterSpacing = .4.sp, maxLines = 1)
-                Text(timeText, color = Color.White, fontSize = if (compact) 11.sp else 17.sp, fontWeight = FontWeight.Bold, fontFamily = Poppins, maxLines = 1)
+
+            Column(
+                horizontalAlignment = Alignment.End,
+                modifier = Modifier.padding(end = if (phone) 5.dp else 14.dp),
+            ) {
+                Text(
+                    dateText,
+                    color = OttGoldDim,
+                    fontSize = if (phone) 7.sp else 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = .35.sp,
+                    maxLines = 1,
+                )
+                Text(
+                    timeText,
+                    color = Color.White,
+                    fontSize = if (phone) 9.sp else 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = Poppins,
+                    maxLines = 1,
+                )
             }
+
             Box {
                 Row(
-                    Modifier.clip(RoundedCornerShape(13.dp))
+                    Modifier.clip(RoundedCornerShape(12.dp))
                         .background(Color(0x18FFFFFF))
-                        .border(1.dp, Color(0x2AFFFFFF), RoundedCornerShape(13.dp))
-                        .dlClickable(RoundedCornerShape(13.dp), OttGold, 2.dp, 1.03f) { profileMenu = true }
-                        .padding(horizontal = if (compact) 5.dp else 9.dp, vertical = 5.dp),
+                        .border(1.dp, Color(0x2AFFFFFF), RoundedCornerShape(12.dp))
+                        .dlClickable(RoundedCornerShape(12.dp), OttGold, 2.dp, 1.03f) { profileMenu = true }
+                        .padding(horizontal = if (phone) 4.dp else 9.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    ProfileAvatar(profile.av, if (compact) 34.dp else 38.dp)
-                    if (!compact) {
+                    ProfileAvatar(profile.av, if (phone) 30.dp else 36.dp)
+                    if (!phone) {
                         Column {
-                            Text(profile.name, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-                            Text("CAMBIAR PERFIL", color = OttGoldDim, fontSize = 7.sp, fontWeight = FontWeight.Bold, letterSpacing = .7.sp)
+                            Text(profile.name, color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                            Text("CAMBIAR PERFIL", color = OttGoldDim, fontSize = 7.sp, fontWeight = FontWeight.Bold, letterSpacing = .55.sp)
                         }
-                        Text("⌄", color = OttText, fontSize = 17.sp)
+                        Text("⌄", color = OttText, fontSize = 16.sp)
                     }
                 }
                 DropdownMenu(expanded = profileMenu, onDismissRequest = { profileMenu = false }) {
                     profiles.forEach { item ->
                         DropdownMenuItem(
                             text = {
-                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
                                     ProfileAvatar(item.av, 32.dp)
                                     Column {
                                         Text(item.name, fontWeight = FontWeight.SemiBold)
@@ -180,39 +222,54 @@ private fun OttTopBar(vm: MainViewModel) {
                             onClick = { profileMenu = false; if (item.id != profile.id) vm.selectProfile(item.id) },
                         )
                     }
+                    DropdownMenuItem(text = { Text("Mi lista") }, onClick = { profileMenu = false; vm.ottTab = OttTab.Fav })
                     DropdownMenuItem(text = { Text("Administrar perfiles") }, onClick = { profileMenu = false; vm.showProfileSwitcher() })
                 }
             }
+
             Box(
-                Modifier.padding(start = 8.dp).size(if (compact) 38.dp else 42.dp)
-                    .clip(RoundedCornerShape(13.dp)).background(Color(0x18FFFFFF))
-                    .border(1.dp, Color(0x2AFFFFFF), RoundedCornerShape(13.dp))
-                    .dlClickable(RoundedCornerShape(13.dp), OttGold, 2.dp, 1.04f) { vm.screen = Screen.Settings },
+                Modifier.padding(start = if (phone) 5.dp else 8.dp).size(if (phone) 34.dp else 40.dp)
+                    .clip(RoundedCornerShape(11.dp)).background(Color(0x18FFFFFF))
+                    .border(1.dp, Color(0x2AFFFFFF), RoundedCornerShape(11.dp))
+                    .dlClickable(RoundedCornerShape(11.dp), OttGold, 2.dp, 1.04f) { vm.screen = Screen.Settings },
                 contentAlignment = Alignment.Center,
-            ) { SvgIcon(Ico.gear, if (compact) 20.dp else 22.dp, OttText, 1.8f) }
+            ) { SvgIcon(Ico.gear, if (phone) 18.dp else 21.dp, OttText, 1.8f) }
         }
 
-        if (!compact) Row(
-            Modifier.fillMaxWidth().padding(top = 11.dp).horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(9.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            OTT_NAV.forEach { item ->
-                val selected = vm.ottTab == item.tab
-                Row(
-                    Modifier.height(if (compact) 39.dp else 43.dp)
-                        .clip(RoundedCornerShape(11.dp))
-                        .background(if (selected) Color(0x3A168BFF) else Color(0x0DFFFFFF))
-                        .border(1.dp, if (selected) Color(0x88168BFF) else Color(0x18FFFFFF), RoundedCornerShape(11.dp))
-                        .dlClickable(RoundedCornerShape(11.dp), OttGold, 2.dp, 1.03f) { vm.ottTab = item.tab }
-                        .padding(horizontal = if (compact) 11.dp else 16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(7.dp),
-                ) {
-                    SvgIcon(item.icon, if (compact) 16.dp else 18.dp, if (selected) Color.White else OttText.copy(alpha = .78f), 1.8f)
-                    Text(item.label, color = if (selected) Color.White else OttText.copy(alpha = .84f), fontSize = if (compact) 11.sp else 13.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium, fontFamily = Poppins, maxLines = 1)
-                }
+        if (!desktop && !phone) {
+            Row(
+                Modifier.fillMaxWidth().padding(top = 9.dp).horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                OTT_NAV.forEach { item -> OttNavButton(item, vm, compact = true) }
             }
         }
+    }
+}
+
+@Composable
+private fun OttNavButton(item: OttNavItem, vm: MainViewModel, compact: Boolean) {
+    val selected = vm.ottTab == item.tab
+    val shape = RoundedCornerShape(11.dp)
+    Row(
+        Modifier.height(if (compact) 39.dp else 44.dp)
+            .clip(shape)
+            .background(if (selected) Color(0x3A168BFF) else Color(0x0DFFFFFF))
+            .border(1.dp, if (selected) Color(0x88168BFF) else Color(0x18FFFFFF), shape)
+            .dlClickable(shape, Color.White, 2.dp, 1.035f) { vm.ottTab = item.tab }
+            .padding(horizontal = if (compact) 12.dp else 13.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        SvgIcon(item.icon, if (compact) 15.dp else 17.dp, if (selected) Color.White else OttText.copy(alpha = .78f), 1.8f)
+        Text(
+            item.label,
+            color = if (selected) Color.White else OttText.copy(alpha = .84f),
+            fontSize = if (compact) 11.sp else 12.sp,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+            fontFamily = Poppins,
+            maxLines = 1,
+        )
     }
 }

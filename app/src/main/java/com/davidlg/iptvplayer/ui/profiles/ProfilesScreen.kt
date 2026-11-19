@@ -5,9 +5,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -23,6 +25,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Text
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -148,13 +152,31 @@ fun ProfilesScreen(vm: MainViewModel) {
         }
 
         dialog?.let { d ->
-            Box(Modifier.fillMaxSize().background(Color(0xC7000000)), contentAlignment = Alignment.Center) {
-                when (d) {
-                    is PfDialog.Edit -> EditDialog(vm, d.p, profiles, onDone = { dialog = null }, onToast = { toast = it },
-                        onDelete = { p -> dialog = PfDialog.Confirm(p) })
-                    is PfDialog.Confirm -> ConfirmDialog(d.p,
-                        onCancel = { dialog = null },
-                        onDelete = { vm.deleteProfile(d.p.id); dialog = null; toast = "Perfil eliminado" })
+            Dialog(
+                onDismissRequest = { dialog = null },
+                properties = DialogProperties(
+                    usePlatformDefaultWidth = false,
+                    dismissOnBackPress = true,
+                    dismissOnClickOutside = false,
+                ),
+            ) {
+                Box(
+                    Modifier.fillMaxSize().background(Color(0xC7000000)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    when (d) {
+                        is PfDialog.Edit -> EditDialog(
+                            vm, d.p, profiles,
+                            onDone = { dialog = null },
+                            onToast = { toast = it },
+                            onDelete = { p -> dialog = PfDialog.Confirm(p) },
+                        )
+                        is PfDialog.Confirm -> ConfirmDialog(
+                            d.p,
+                            onCancel = { dialog = null },
+                            onDelete = { vm.deleteProfile(d.p.id); dialog = null; toast = "Perfil eliminado" },
+                        )
+                    }
                 }
             }
         }
@@ -282,100 +304,117 @@ private fun EditDialog(
         if (compact) keyboard?.show()
     }
 
-    // Acciones fuera del área desplazable: nunca quedan debajo del teclado ni fuera del viewport.
-    Column(
+    // El diálogo usa una ventana que se redimensiona con el teclado. El contenido
+    // puede desplazarse, pero la fila de acciones queda fija fuera del scroll.
+    BoxWithConstraints(
         Modifier.fillMaxWidth(if (compact) .96f else 1f)
-            .widthIn(max = 1180.dp).imePadding()
-            .heightIn(max = (config.screenHeightDp - 28).coerceAtLeast(360).dp)
-            .clip(RoundedCornerShape(24.dp))
-            .background(Color(0xFF10151C))
-            .border(1.dp, Color(0x1AFFFFFF), RoundedCornerShape(24.dp))
-            .padding(horizontal = if (compact) 14.dp else 64.dp, vertical = if (compact) 14.dp else 34.dp)
+            .widthIn(max = 1180.dp)
+            .imePadding()
+            .fillMaxHeight(if (compact) .94f else .86f)
+            .heightIn(max = (config.screenHeightDp - 24).coerceAtLeast(280).dp)
     ) {
-        Text(
-            if (p == null) "Añadir perfil" else "Editar perfil",
-            color = Color.White, fontSize = if (compact) 24.sp else 48.sp,
-            fontWeight = FontWeight.Bold, fontFamily = Sans,
-        )
+        val reservedForActions = if (compact) 154.dp else 210.dp
+        val bodyMaxHeight = (maxHeight - reservedForActions).coerceAtLeast(110.dp)
+        val actionWidth = if (compact) maxOf(110, (config.screenWidthDp - 100) / 2).dp else 230.dp
+
         Column(
-            Modifier.weight(1f, fill = false).fillMaxWidth().verticalScroll(rememberScrollState())
-                .padding(top = if (compact) 12.dp else 26.dp),
+            Modifier.fillMaxSize()
+                .clip(RoundedCornerShape(24.dp))
+                .background(Color(0xFF10151C))
+                .border(1.dp, Color(0x1AFFFFFF), RoundedCornerShape(24.dp))
+                .padding(horizontal = if (compact) 14.dp else 64.dp, vertical = if (compact) 14.dp else 34.dp),
+            verticalArrangement = Arrangement.SpaceBetween,
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(if (compact) 12.dp else 56.dp), verticalAlignment = Alignment.Top) {
-                Box(Modifier.size(if (compact) 76.dp else 190.dp).clip(RoundedCornerShape(18.dp))) {
-                    ProfileAvatar(av, if (compact) 76.dp else 190.dp)
-                }
-                Column(Modifier.weight(1f)) {
-                    Text("NOMBRE", color = PfDim, fontSize = if (compact) 12.sp else 23.sp, fontWeight = FontWeight.Bold, fontFamily = Sans, letterSpacing = 3.2.sp)
-                    Box(
-                        Modifier.padding(top = 6.dp, bottom = if (compact) 12.dp else 24.dp)
-                            .fillMaxWidth().height(if (compact) 48.dp else 76.dp)
-                            .clip(RoundedCornerShape(14.dp)).background(Color(0x4D000000))
-                            .border(2.dp, if (fieldFocused) Color.White else Color(0x33FFFFFF), RoundedCornerShape(14.dp))
-                            .padding(horizontal = if (compact) 10.dp else 26.dp),
-                        contentAlignment = Alignment.CenterStart,
-                    ) {
-                        BasicTextField(
-                            value = name, onValueChange = { if (it.length <= 14) name = it }, singleLine = true,
-                            textStyle = TextStyle(color = Color.White, fontSize = if (compact) 16.sp else 30.sp, fontFamily = Sans),
-                            cursorBrush = SolidColor(Color.White),
-                            modifier = Modifier.fillMaxWidth().focusRequester(nameFocus).onFocusChanged {
-                                fieldFocused = it.isFocused
-                                if (it.isFocused && compact) keyboard?.show()
-                                if (!it.isFocused) keyboard?.hide()
-                            },
-                            decorationBox = { inner ->
-                                if (name.isEmpty()) Text("Nombre del perfil", color = Color(0x59FFFFFF), fontSize = if (compact) 15.sp else 30.sp, fontFamily = Sans)
-                                inner()
-                            },
-                        )
+            Text(
+                if (p == null) "Añadir perfil" else "Editar perfil",
+                color = Color.White, fontSize = if (compact) 24.sp else 48.sp,
+                fontWeight = FontWeight.Bold, fontFamily = Sans,
+            )
+            Column(
+                Modifier.fillMaxWidth()
+                    .heightIn(max = bodyMaxHeight)
+                    .verticalScroll(rememberScrollState())
+                    .padding(top = if (compact) 12.dp else 26.dp),
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(if (compact) 12.dp else 56.dp), verticalAlignment = Alignment.Top) {
+                    Box(Modifier.size(if (compact) 76.dp else 190.dp).clip(RoundedCornerShape(18.dp))) {
+                        ProfileAvatar(av, if (compact) 76.dp else 190.dp)
                     }
-                    Text("AVATAR", color = PfDim, fontSize = if (compact) 12.sp else 23.sp, fontWeight = FontWeight.Bold, fontFamily = Sans, letterSpacing = 3.2.sp)
-                    Column(Modifier.padding(top = 7.dp), verticalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 14.dp)) {
-                        for (row in 0 until 2) Row(horizontalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 16.dp)) {
-                            for (i in row * 4 until row * 4 + 4) {
-                                var foc by remember { mutableStateOf(false) }
-                                Box(
-                                    Modifier.size(if (compact) 42.dp else 82.dp)
-                                        .dlClickable(RoundedCornerShape(14.dp), Color.White, 3.dp, 1.08f, { foc = it }) { av = i },
-                                ) {
-                                    ProfileAvatar(i, if (compact) 42.dp else 82.dp)
-                                    if (i != av && !foc) Box(Modifier.fillMaxSize().background(Color(0x4D000000)))
-                                    if (i == av) Box(Modifier.fillMaxSize().border(3.dp, if (foc) Color.White else PfAcc, RoundedCornerShape(14.dp)))
+                    Column(Modifier.fillMaxWidth()) {
+                        Text("NOMBRE", color = PfDim, fontSize = if (compact) 12.sp else 23.sp, fontWeight = FontWeight.Bold, fontFamily = Sans, letterSpacing = 3.2.sp)
+                        Box(
+                            Modifier.padding(top = 6.dp, bottom = if (compact) 12.dp else 24.dp)
+                                .fillMaxWidth().height(if (compact) 48.dp else 76.dp)
+                                .clip(RoundedCornerShape(14.dp)).background(Color(0x4D000000))
+                                .border(2.dp, if (fieldFocused) Color.White else Color(0x33FFFFFF), RoundedCornerShape(14.dp))
+                                .padding(horizontal = if (compact) 10.dp else 26.dp),
+                            contentAlignment = Alignment.CenterStart,
+                        ) {
+                            BasicTextField(
+                                value = name, onValueChange = { if (it.length <= 14) name = it }, singleLine = true,
+                                textStyle = TextStyle(color = Color.White, fontSize = if (compact) 16.sp else 30.sp, fontFamily = Sans),
+                                cursorBrush = SolidColor(Color.White),
+                                modifier = Modifier.fillMaxWidth().focusRequester(nameFocus).onFocusChanged {
+                                    fieldFocused = it.isFocused
+                                    if (it.isFocused && compact) keyboard?.show()
+                                    if (!it.isFocused) keyboard?.hide()
+                                },
+                                decorationBox = { inner ->
+                                    if (name.isEmpty()) Text("Nombre del perfil", color = Color(0x59FFFFFF), fontSize = if (compact) 15.sp else 30.sp, fontFamily = Sans)
+                                    inner()
+                                },
+                            )
+                        }
+                        Text("AVATAR", color = PfDim, fontSize = if (compact) 12.sp else 23.sp, fontWeight = FontWeight.Bold, fontFamily = Sans, letterSpacing = 3.2.sp)
+                        Column(Modifier.padding(top = 7.dp), verticalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 14.dp)) {
+                            for (row in 0 until 2) Row(horizontalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 16.dp)) {
+                                for (i in row * 4 until row * 4 + 4) {
+                                    var foc by remember { mutableStateOf(false) }
+                                    Box(
+                                        Modifier.size(if (compact) 42.dp else 82.dp)
+                                            .dlClickable(RoundedCornerShape(14.dp), Color.White, 3.dp, 1.08f, { foc = it }) { av = i },
+                                    ) {
+                                        ProfileAvatar(i, if (compact) 42.dp else 82.dp)
+                                        if (i != av && !foc) Box(Modifier.fillMaxSize().background(Color(0x4D000000)))
+                                        if (i == av) Box(Modifier.fillMaxSize().border(3.dp, if (foc) Color.White else PfAcc, RoundedCornerShape(14.dp)))
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
-        }
-        Row(
-            Modifier.fillMaxWidth().padding(top = if (compact) 14.dp else 24.dp),
-            horizontalArrangement = Arrangement.spacedBy(if (compact) 8.dp else 20.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            PfButton("Guardar", "pri", if (compact) Modifier.weight(1f) else Modifier) {
-                keyboard?.hide()
-                val n = name.replace(Regex("\\s+"), " ").trim()
-                when {
-                    n.isEmpty() -> onToast("Escribe un nombre para el perfil")
-                    all.any { it.id != p?.id && it.name.equals(n, ignoreCase = true) } -> onToast("Ya existe un perfil con ese nombre")
-                    else -> {
-                        if (p != null) { vm.editProfile(p.id, n, av); onDone() }
-                        else if (vm.addProfile(n, av)) { onToast("Perfil creado"); onDone() }
-                        else onToast("No se pudo crear el perfil. Comprueba el límite de perfiles.")
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(if (compact) 7.dp else 10.dp)) {
+                Row(
+                    Modifier.fillMaxWidth().padding(top = if (compact) 8.dp else 14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(if (compact) 8.dp else 20.dp, Alignment.End),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    PfButton("Guardar", "pri", Modifier.width(actionWidth)) {
+                        keyboard?.hide()
+                        val n = name.replace(Regex("\\s+"), " ").trim()
+                        when {
+                            n.isEmpty() -> onToast("Escribe un nombre para el perfil")
+                            all.any { it.id != p?.id && it.name.equals(n, ignoreCase = true) } -> onToast("Ya existe un perfil con ese nombre")
+                            else -> {
+                                if (p != null) { vm.editProfile(p.id, n, av); onDone() }
+                                else if (vm.addProfile(n, av)) { onToast("Perfil creado"); onDone() }
+                                else onToast("No se pudo crear el perfil. Comprueba el límite de perfiles.")
+                            }
+                        }
                     }
+                    PfButton("Cancelar", "", Modifier.width(actionWidth)) {
+                        keyboard?.hide()
+                        onDone()
+                    }
+                    if (canDelete && p != null && !compact) PfButton("Eliminar perfil", "danger") { onDelete(p) }
                 }
+                if (canDelete && p != null && compact) {
+                    PfButton("Eliminar perfil", "danger", Modifier.fillMaxWidth()) { keyboard?.hide(); onDelete(p) }
+                }
+                if (note.isNotBlank()) Text(note, color = PfDim, fontSize = if (compact) 10.sp else 18.sp, fontFamily = Sans, textAlign = TextAlign.End, modifier = Modifier.fillMaxWidth())
             }
-            PfButton("Cancelar", "", if (compact) Modifier.weight(1f) else Modifier) {
-                keyboard?.hide(); onDone()
-            }
-            if (canDelete && p != null && !compact) PfButton("Eliminar perfil", "danger") { onDelete(p) }
         }
-        if (canDelete && p != null && compact) {
-            PfButton("Eliminar perfil", "danger", Modifier.fillMaxWidth()) { keyboard?.hide(); onDelete(p) }
-        }
-        if (note.isNotBlank()) Text(note, color = PfDim, fontSize = if (compact) 10.sp else 18.sp, fontFamily = Sans, textAlign = TextAlign.End, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
     }
 }
 

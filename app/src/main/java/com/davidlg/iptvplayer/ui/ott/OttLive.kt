@@ -80,6 +80,12 @@ fun OttLive(vm: MainViewModel, initialSection: String = "channels") {
     val hostView = LocalView.current
     val showEpgImages = playbackPrefs.str("showEpgImages", "on") != "off"
     val useShaka = playbackPrefs.str("playerEngine", "auto") == "shaka"
+    val inlinePlayer = remember(playbackPrefs.str("bufferMode", "default"), playbackPrefs.str("bitrateMode", "auto")) {
+        PlaybackFactory.newPlayer(context, playbackPrefs.str("bufferMode", "default"), playbackPrefs.str("bitrateMode", "auto"))
+    }
+    DisposableEffect(inlinePlayer) {
+        onDispose { inlinePlayer.release() }
+    }
     val groups = remember(live) { live.groupBy { it.group.ifBlank { "Sin grupo" } } }
     val names = remember(groups) { listOf("TODOS") + groups.keys.toList() }
     var group by remember { mutableStateOf("TODOS") }
@@ -91,6 +97,10 @@ fun OttLive(vm: MainViewModel, initialSection: String = "channels") {
         onDispose { hostView.keepScreenOn = false }
     }
     LaunchedEffect(cur?.id) { if (cur?.id != selectedId) vm.selectLiveChannel(cur) }
+    LaunchedEffect(cur?.id, inlinePlayer, useShaka) {
+        if (cur != null && !useShaka) PlaybackFactory.play(context, inlinePlayer, cur, 0L)
+        else inlinePlayer.stop()
+    }
     val prog = remember(cur, epgVer) { cur?.let { EpgStore.now(it) } }
     val next = remember(cur, epgVer) { cur?.let { EpgStore.next(it) } }
 
@@ -121,16 +131,6 @@ fun OttLive(vm: MainViewModel, initialSection: String = "channels") {
             }
 
             // Reproductor integrado real: mantiene ExoPlayer en la pantalla OTT móvil.
-            val inlinePlayer = remember(playbackPrefs.str("bufferMode", "default"), playbackPrefs.str("bitrateMode", "auto")) {
-                PlaybackFactory.newPlayer(context, playbackPrefs.str("bufferMode", "default"), playbackPrefs.str("bitrateMode", "auto"))
-            }
-            DisposableEffect(inlinePlayer) {
-                onDispose { inlinePlayer.release() }
-            }
-            LaunchedEffect(cur?.id, inlinePlayer, useShaka) {
-                if (cur != null && !useShaka) PlaybackFactory.play(context, inlinePlayer, cur, 0L)
-                else inlinePlayer.stop()
-            }
             Box(
                 Modifier.fillMaxWidth().height(210.dp)
                     .clip(RoundedCornerShape(17.dp))
@@ -268,40 +268,69 @@ fun OttLive(vm: MainViewModel, initialSection: String = "channels") {
         }
         // ------------ Columna derecha ------------
         Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            // Banner / vista previa
+            // Vista previa real: usa el motor seleccionado en Ajustes (ExoPlayer o Shaka).
             Box(
                 Modifier.fillMaxWidth().height(300.dp).clip(RoundedCornerShape(22.dp))
-                    .background(Brush.linearGradient(listOf(Color(0xFF0B1728), Color(0xFF17365A), Color(0xFF0B1728))))
-                    .border(1.dp, Color(0x38168BFF), RoundedCornerShape(22.dp))
+                    .background(Color.Black)
+                    .border(1.dp, Color(0x66168BFF), RoundedCornerShape(22.dp))
             ) {
                 if (cur != null) {
-                    Row(Modifier.padding(start = 31.dp, top = 28.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        Box(Modifier.size(68.dp).clip(RoundedCornerShape(14.dp)).background(Color(0x33FFFFFF)), contentAlignment = Alignment.Center) {
-                            if (cur.logo.isNotBlank()) AsyncImage(cur.logo, null, Modifier.fillMaxSize().padding(6.dp), contentScale = ContentScale.Fit)
-                            else Text("TV", color = OttGold, fontWeight = FontWeight.Black, fontFamily = Poppins, fontSize = 22.sp)
+                    Row(Modifier.fillMaxSize()) {
+                        Box(Modifier.fillMaxHeight().fillMaxWidth(.46f).background(Color.Black)) {
+                            if (useShaka) {
+                                ShakaSurface(cur, Modifier.fillMaxSize())
+                            } else {
+                                AndroidView(
+                                    modifier = Modifier.fillMaxSize(),
+                                    factory = { viewContext ->
+                                        PlayerView(viewContext).apply {
+                                            useController = false
+                                            resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                                            setShutterBackgroundColor(android.graphics.Color.BLACK)
+                                            layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+                                            player = inlinePlayer
+                                        }
+                                    },
+                                    update = { it.player = inlinePlayer },
+                                )
+                            }
+                            Box(Modifier.align(Alignment.TopStart).padding(13.dp).clip(RoundedCornerShape(6.dp)).background(Color(0xD9000000)).padding(horizontal = 10.dp, vertical = 6.dp)) {
+                                Text("● EN VIVO", color = Color(0xFF8DE2B0), fontSize = 11.sp, fontWeight = FontWeight.Black, fontFamily = Poppins, letterSpacing = 1.sp)
+                            }
                         }
-                        Text(cur.name, color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.ExtraBold, fontFamily = Poppins, maxLines = 1, modifier = Modifier.width(520.dp), overflow = TextOverflow.Ellipsis)
-                    }
-                    Box(Modifier.align(Alignment.BottomStart).padding(start = 31.dp, bottom = 26.dp)) {
-                        GoldPill("▶  Ver en vivo", 22, 36, 16, Modifier.width(234.dp), 0f) { vm.play(cur, list) }
-                    }
-                    Column(Modifier.align(Alignment.CenterEnd).padding(end = 36.dp).width(740.dp)) {
-                        Text(prog?.title ?: "Sin información EPG", color = Color.White, fontSize = 48.sp, fontWeight = FontWeight.Bold, fontFamily = Poppins, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 54.sp)
-                        Text(
-                            (prog?.let { fmtAmPm(it.start) + " – " + fmtAmPm(it.stop) + " · " } ?: "") + cur.group,
-                            color = OttCream, fontSize = 26.sp, fontWeight = FontWeight.SemiBold, fontFamily = Poppins, maxLines = 1, modifier = Modifier.padding(top = 6.dp),
-                        )
-                        Text(prog?.desc.orEmpty(), color = OttText.copy(alpha = 0.78f), fontSize = 24.sp, fontFamily = Poppins, maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 8.dp))
-                    }
-                    Row(Modifier.align(Alignment.TopEnd).padding(top = 24.dp, end = 30.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(8.dp).clip(RoundedCornerShape(50)).background(Color(0xFF3DDC84)))
-                        Text("EN VIVO " + pad3(cur.number), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black, fontFamily = Poppins, letterSpacing = 2.sp, modifier = Modifier.padding(start = 10.dp))
-                    }
-                    Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(4.dp).background(Color(0x1FFFFFFF))) {
-                        Box(Modifier.fillMaxWidth(EpgStore.progress(prog)).fillMaxHeight().background(OttGold))
+                        Column(
+                            Modifier.weight(1f).fillMaxHeight().background(Brush.horizontalGradient(listOf(Color(0xFF10243B), Color(0xFF0B1728))))
+                                .padding(horizontal = 28.dp, vertical = 22.dp),
+                            verticalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Box(Modifier.size(44.dp).clip(RoundedCornerShape(10.dp)).background(Color(0x33FFFFFF)), contentAlignment = Alignment.Center) {
+                                        if (cur.logo.isNotBlank()) AsyncImage(cur.logo, null, Modifier.fillMaxSize().padding(5.dp), contentScale = ContentScale.Fit)
+                                        else Text("TV", color = OttGold, fontWeight = FontWeight.Black, fontFamily = Poppins)
+                                    }
+                                    Column(Modifier.weight(1f)) {
+                                        Text("CANAL ${pad3(cur.number)}", color = OttGoldSoft, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                                        Text(cur.name, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, fontFamily = Poppins, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    }
+                                }
+                                Text(prog?.title ?: "Sin información EPG", color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.Bold, fontFamily = Poppins, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 32.sp)
+                                Text(
+                                    (prog?.let { fmtAmPm(it.start) + " – " + fmtAmPm(it.stop) + " · " } ?: "") + cur.group,
+                                    color = OttCream, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, fontFamily = Poppins, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                )
+                                if (!prog?.desc.isNullOrBlank()) Text(prog?.desc.orEmpty(), color = OttText.copy(alpha = .78f), fontSize = 12.sp, fontFamily = Poppins, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                            }
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Box(Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(4.dp)).background(Color(0x332F9BFF))) {
+                                    Box(Modifier.fillMaxWidth(EpgStore.progress(prog)).height(4.dp).background(OttGold))
+                                }
+                                GoldPill("▶  Ver en pantalla completa", 14, 20, 10, Modifier) { vm.play(cur, list) }
+                            }
+                        }
                     }
                 } else {
-                    Text("Sin canales. Agrega una lista en Ajustes.", color = OttText, fontSize = 26.sp, fontFamily = Poppins, modifier = Modifier.align(Alignment.Center))
+                    Text("Sin canales. Agrega una lista en Ajustes.", color = OttText, fontSize = 20.sp, fontFamily = Poppins, modifier = Modifier.align(Alignment.Center))
                 }
             }
             // Carrusel de canales

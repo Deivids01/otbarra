@@ -47,6 +47,7 @@ import com.davidlg.iptvplayer.data.sourceSynopsis
 import com.davidlg.iptvplayer.data.sourceYear
 import com.davidlg.iptvplayer.ui.Poppins
 import com.davidlg.iptvplayer.ui.dlClickable
+import com.davidlg.iptvplayer.ui.profiles.ProfileAvatar
 
 private val HomeBlue = Color(0xFF168BFF)
 private val HomePanel = Color(0xFF0D1929)
@@ -175,6 +176,8 @@ private fun FeaturedTitle(vm: MainViewModel, channel: Channel, playbackQueue: Li
     val genre = resolvedMeta(vm, channel, "genre", channel.sourceGenre())
     val duration = resolvedMeta(vm, channel, "duration", channel.sourceDuration())
     val rating = resolvedMeta(vm, channel, "rating", channel.sourceRating())
+    val activeProfile by vm.activeProfile.collectAsState()
+    val live by vm.live.collectAsState()
     val height = if (phone) 390.dp else if (tablet) 390.dp else 470.dp
     Box(
         Modifier.fillMaxWidth().padding(horizontal = if (phone) 12.dp else if (tablet) 20.dp else 60.dp)
@@ -187,7 +190,7 @@ private fun FeaturedTitle(vm: MainViewModel, channel: Channel, playbackQueue: Li
         Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(0f to Color(0xF507101D), .48f to Color(0xB907101D), 1f to Color(0x1807101D))))
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to Color.Transparent, .56f to Color(0x20000000), 1f to Color(0xD907101D))))
         Column(
-            Modifier.align(Alignment.BottomStart).fillMaxWidth(if (phone) 1f else .76f)
+            Modifier.align(Alignment.BottomStart).fillMaxWidth(if (phone) 1f else if (tablet) .92f else .68f)
                 .padding(start = if (phone) 18.dp else 36.dp, end = if (phone) 18.dp else 28.dp, bottom = if (phone) 20.dp else 34.dp),
             verticalArrangement = Arrangement.spacedBy(if (phone) 8.dp else 12.dp),
         ) {
@@ -213,8 +216,41 @@ private fun FeaturedTitle(vm: MainViewModel, channel: Channel, playbackQueue: Li
                 HeroAction("ⓘ  Detalles", false, phone) { vm.openVodDetails(channel) }
             }
         }
-        if (!phone && poster.isNotBlank() && backdrop.isBlank()) {
-            AsyncImage(poster, null, Modifier.align(Alignment.CenterEnd).padding(end = 34.dp).size(width = 170.dp, height = 250.dp).clip(RoundedCornerShape(15.dp)), contentScale = ContentScale.Crop)
+        if (!phone && !tablet) {
+            Column(
+                Modifier.align(Alignment.CenterEnd)
+                    .padding(end = 28.dp)
+                    .width(226.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(Color(0xCC0A1727))
+                    .border(1.dp, Color(0x554B9FE8), RoundedCornerShape(18.dp))
+                    .dlClickable(RoundedCornerShape(18.dp), HomeBlue, 2.dp, 1.02f) { vm.showProfileSwitcher() }
+                    .padding(17.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    ProfileAvatar(activeProfile.av, 42.dp)
+                    Column(Modifier.weight(1f)) {
+                        Text("PERFIL ACTIVO", color = Color(0xFF91CFFF), fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.1.sp)
+                        Text(activeProfile.name, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+                Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0x334B9FE8)))
+                Text("TU CATÁLOGO", color = Color(0xFF91CFFF), fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.5.sp)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Column {
+                        Text(playbackQueue.size.toString(), color = Color.White, fontSize = 23.sp, fontWeight = FontWeight.ExtraBold, fontFamily = Poppins)
+                        Text("Títulos VOD", color = Color(0xFF9FB4C9), fontSize = 9.sp)
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(live.size.toString(), color = Color.White, fontSize = 23.sp, fontWeight = FontWeight.ExtraBold, fontFamily = Poppins)
+                        Text("Canales", color = Color(0xFF9FB4C9), fontSize = 9.sp)
+                    }
+                }
+                Text("Administrar perfil  ›", color = Color(0xFFB9DFFF), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            }
+        } else if (!phone && poster.isNotBlank() && backdrop.isBlank()) {
+            AsyncImage(poster, null, Modifier.align(Alignment.CenterEnd).padding(end = 24.dp).size(width = 118.dp, height = 176.dp).clip(RoundedCornerShape(15.dp)), contentScale = ContentScale.Crop)
         }
     }
 }
